@@ -10,48 +10,44 @@ const parseHints = (string = "") => {
   return string.split(" ");
 };
 
-// const distinct = (value, index, self) => {
-//   return self.indexOf(value) === index;
-// };
+const checkVocabWithPattern = (vocab = "", hint = "") => {
+  const arrVocab = vocab.split("");
+  const arrHint = hint.split("");
+  for (let index = 0; index < vocab.length; index++) {
+    if (arrHint[index] !== "." && arrHint[index] !== arrVocab[index])
+      return false;
+  }
+  return true;
+};
 
-// const isBlackListed = (blackList, word) => {
-//   const checks = word.split("");
-//   for (let i = 0; i < checks.length; i++) {
-//     const element = checks[i];
-//     if (blackList.includes(element)) {
-//       return true;
-//       break;
-//     }
-//   }
-//   return false;
-// };
-
-// const setBlackList = (blackList, word) => {
-//   const letters = word.split("");
-//   const newList = blackList.concat(letters);
-//   return newList.filter(distinct);
-// };
-
-const runTest = async () => {
+const runTest = async (startAt = "0", stopAt = "-1") => {
   const historyId = ["0"];
-  let puzzleId = 0;
+  let puzzleId = startAt;
   const vocabURL = "https://test8020cto.herokuapp.com/vocabulary?o";
 
-  const { vocabulary: vocabs } = await axios
+  const resultVocab = await axios
     .get(vocabURL)
     .then((res) => {
       return res.data;
     })
     .catch((error) => {
-      console.error(error);
+      console.log("Exit application, Failed fetch vocabs");
+      // console.error(error);
     });
 
-  while (puzzleId !== "-1") {
+  if (!resultVocab) return false;
+
+  const { vocabulary: vocabs } = resultVocab;
+
+  vocabs.sort();
+
+  while (puzzleId !== stopAt) {
     const { hint } = await axios
       .get(getPuzzelUrl(puzzleId))
       .then((res) => res.data)
       .catch((error) => {
-        console.error(error);
+        console.log("Failed fetching hints");
+        console.error(error?.response);
       });
 
     const hints = parseHints(hint);
@@ -59,21 +55,28 @@ const runTest = async () => {
 
     const posted = hints;
     for (let index = 0; index < hints.length; index++) {
-      const hint = hints[index];
+      let hint = hints[index];
+      // let pattern = hint;
       let blackList = [];
       for (let i = 0; i < vocabs.length; i++) {
         const vocab = vocabs[i];
 
+        // if (vocab.length !== hint.length || !checkVocabWithPattern(vocab, hint))
+        //   console.log(`Skipping vocab: ${vocab}`);
+
         if (
           vocab.length === hint.length &&
-          !blackList.includes(vocab.substr(0, 1))
-          // wee only check for forst letter, there's a bug when using the wohle word
+          checkVocabWithPattern(vocab, hint)
         ) {
           posted[index] = vocab;
           const response = await axios
             .get(getGuesslUrl(puzzleId, posted))
             .then((res) => res.data)
-            .catch((error) => ({ error: error.response.data }));
+            .catch((error) => {
+              console.log("Failed fetch guess result");
+              console.error(error?.response);
+            });
+
           const { numCorrect, nextId } = response;
 
           console.log({
@@ -89,17 +92,40 @@ const runTest = async () => {
             nextId,
           });
 
-          // blacklisted the character if numCorrect is still the same
-          if (numCorrect && numCorrect === currentNumCorrect) {
-            //   we only gonna put the first letter, we have a race condition
-            blackList.push(vocab.substr(0, 1));
-            // blackList = blackList.concat(vocab.split(""));
-          }
           // next if we got the word correct
           if (numCorrect && numCorrect === currentNumCorrect + hint.length) {
             currentNumCorrect = numCorrect;
             break;
           }
+          if (numCorrect && numCorrect > currentNumCorrect) {
+            // console.log(checkForPattern(vocab, hint));
+            const letters = vocab.split("");
+            const patterns = hint.split("");
+
+            // // we're gonna check letter by letter
+            for (let x = 0; x < letters.length; x++) {
+              const newPosted = posted;
+              // const arrPattern = pattern.split("")
+              const tempChar = patterns[x];
+              patterns[x] = letters[x];
+              newPosted[index] = patterns.join("");
+              const response2 = await axios
+                .get(getGuesslUrl(puzzleId, newPosted))
+                .then((res) => res.data)
+                .catch((error) => {
+                  console.error(error?.response);
+                });
+              const { numCorrect: numCorrect2 } = response2;
+              console.log({ newPosted, numCorrect2 });
+              if (numCorrect2 === currentNumCorrect) {
+                patterns[x] = tempChar;
+              } else {
+                currentNumCorrect = numCorrect2;
+              }
+              hint = patterns.join("");
+            }
+          }
+
           //   to the next puzzle
           if (nextId) {
             historyId.push(nextId);
@@ -112,4 +138,4 @@ const runTest = async () => {
   }
 };
 
-runTest();
+runTest("0", "-1");
