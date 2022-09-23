@@ -20,6 +20,18 @@ const checkVocabWithPattern = (vocab = "", hint = "") => {
   return true;
 };
 
+const isInBlackList = (vocab, blackList) => {
+  const letters = vocab.split("");
+  for (let index = 0; index < letters.length; index++) {
+    const element = letters[index];
+    for (let i = 0; i < blackList.length; i++) {
+      const black = blackList[i];
+      if (element === black.substr(index, 1)) return true;
+    }
+  }
+  return false;
+};
+
 const runTest = async (startAt = "0", stopAt = "-1") => {
   const historyId = ["0"];
   let puzzleId = startAt;
@@ -56,8 +68,8 @@ const runTest = async (startAt = "0", stopAt = "-1") => {
     const posted = hints;
     for (let index = 0; index < hints.length; index++) {
       let hint = hints[index];
-      // let pattern = hint;
-      let blackList = [];
+      let blackListWord = [];
+
       for (let i = 0; i < vocabs.length; i++) {
         const vocab = vocabs[i];
 
@@ -66,7 +78,8 @@ const runTest = async (startAt = "0", stopAt = "-1") => {
 
         if (
           vocab.length === hint.length &&
-          checkVocabWithPattern(vocab, hint)
+          checkVocabWithPattern(vocab, hint) &&
+          !isInBlackList(vocab, blackListWord)
         ) {
           posted[index] = vocab;
           const response = await axios
@@ -86,7 +99,7 @@ const runTest = async (startAt = "0", stopAt = "-1") => {
             vocab,
             index,
             posted,
-            blackList,
+            blackListWord,
             currentNumCorrect,
             numCorrect,
             nextId,
@@ -97,6 +110,12 @@ const runTest = async (startAt = "0", stopAt = "-1") => {
             currentNumCorrect = numCorrect;
             break;
           }
+
+          // if numCorrect still the same, we put the vocab on black list
+          if (numCorrect && numCorrect === currentNumCorrect) {
+            blackListWord.push(vocab);
+          }
+
           if (numCorrect && numCorrect > currentNumCorrect) {
             // console.log(checkForPattern(vocab, hint));
             const letters = vocab.split("");
